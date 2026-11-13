@@ -3090,7 +3090,7 @@ var qrcode = function() {
     return qrcode;
 }));
 </script>
-<script>window.GB_CLIENT_ID=window.GB_CLIENT_ID||'';window.GB_VER='v202611130221';</script>
+<script>window.GB_CLIENT_ID=window.GB_CLIENT_ID||'';window.GB_VER='v202611130528';</script>
 <script>
 (function(){
 'use strict';
@@ -3700,10 +3700,12 @@ function pBackup(root){
     '<div class="card"><h2>📗 엑셀</h2><div class="toolbar"><button class="btn" id="xl">엑셀로 내보내기</button><label class="btn">2026 가계부 엑셀에서 가져오기<input type="file" id="imp" accept=".xlsx"></label></div></div>'+
     '<div class="card"><h2>⚠️ 초기화</h2><button class="btn danger" id="reset">이 기기 데이터 모두 지우기</button><div class="muted small" style="margin-top:6px">원드라이브에 연결돼 있으면 다시 연결할 때 원드라이브 내용이 돌아와요.</div></div>';
   $('#bk').onclick=function(){var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(D)],{type:'application/json'}));a.download='우리집가계부_백업_'+TODAY.replace(/-/g,'')+'.json';document.body.appendChild(a);a.click();a.remove()};
-  $('#rs').onchange=function(){var f=this.files[0];if(!f)return;f.text().then(function(t){var d=JSON.parse(t),nd=null;if(valid2(d))nd=d;else if(d&&d.v===1&&Array.isArray(d.txns))nd=fromV1(d);if(!nd)throw 0;
+  $('#rs').onchange=function(){var f=this.files[0];if(!f)return;f.text().then(function(t){var d=JSON.parse(t);
+    if(d&&d.v===1&&Array.isArray(d.txns)){if(D.txns.length)return importV1(d);D=fromV1(d);commit('set');toast('불러왔어요 ✓ 거래 '+D.txns.length+'건');return}
+    if(!valid2(d))throw 0;var nd=d;
     var mode=D.txns.length?confirm('불러온 파일(거래 '+nd.txns.length+'건)과 지금 데이터를 합칠까요?\n\n[확인] 합치기 (같은 거래는 하나로)\n[취소] 지금 데이터를 지우고 파일 내용으로 바꾸기'):true;
     if(D.txns.length&&!mode&&!confirm('정말 지금 데이터를 지우고 바꿀까요?'))return;
-    D=mode&&D.txns.length?OD.merge(D,nd):nd;if(!mode)D.settingsU=Date.now();D.settingsU=Math.max(D.settingsU||0,nd.settingsU||0);commit('set');toast('불러왔어요 ✓ 거래 '+D.txns.length+'건')}).catch(function(){toast('파일 형식이 맞지 않아요',true)})};
+    D=mode&&D.txns.length?OD.merge(D,nd):nd;D.settingsU=Date.now();commit('set');toast('불러왔어요 ✓ 거래 '+D.txns.length+'건')}).catch(function(){toast('파일 형식이 맞지 않아요',true)})};
   $('#xl').onclick=exportXlsx;
   $('#imp').onchange=function(){var f=this.files[0];if(f)importXlsx(f)};
   $('#reset').onclick=function(){if(!confirm('이 기기의 가계부 데이터를 모두 지울까요? 먼저 백업해 두세요.'))return;localStorage.removeItem(STORE);localStorage.removeItem('gb_od_etag');location.reload()};
@@ -3732,6 +3734,48 @@ function importXlsx(f){
         var t={id:uid(),type:'exp',date:ds,time:'',amount:Math.round(amt||0),cat:String(row[13]||''),acct:meth==='현금'?defaultAcct('현금'):meth==='신용카드'?defaultAcct('카드'):defaultAcct('은행'),to:'',text:String(text||''),note:'',key:String(row[14]||''),auto:meth==='자동이체'?1:0,photos:[],u:Date.now()};
         if(D.txns.some(function(x){return x.date===t.date&&x.text===t.text&&+x.amount===t.amount}))continue;add.push(t)}});
     if(!add.length){toast('새로 가져올 거래가 없어요');return}if(!confirm(add.length+'건을 가져올까요?'))return;D.txns=D.txns.concat(add);commit('tx');toast(add.length+'건 가져왔어요')}).catch(function(e){toast('엑셀을 읽지 못했어요',true)});
+}
+
+// PC 이전 버전(v1) 백업을 지금 데이터에 합치기 — 겹치는 건 하나로, 새로 넣은 것·수입·메모만 반영
+function importV1(d){
+  var nd=fromV1(d),add=[],diffs=[],notes=0,incAdd=0,incUpd=0,used={};
+  var split=function(o){var m=String(o.text||'').split(' | ');if(m.length>1){o.text=m[0];if(!o.note)o.note=m.slice(1).join(' | ')}return o};
+  // 지출: 승인번호(key) 묶음 단위
+  var groups={},loose=[];nd.txns.filter(function(o){return o.type==='exp'}).map(split).forEach(function(o){if(o.key)(groups[o.key]=groups[o.key]||[]).push(o);else loose.push(o)});
+  Object.keys(groups).forEach(function(k){var olds=groups[k],cur=D.txns.filter(function(t){return t.key===k});
+    if(!cur.length){add=add.concat(olds);return}
+    cur.forEach(function(t){used[t.id]=1});
+    var sig=function(a){return a.map(function(x){return x.amount+'/'+(x.cat||'')}).sort().join(',')};
+    if(sig(olds)===sig(cur)){olds.forEach(function(o){var t=cur.filter(function(x){return x.amount===o.amount&&!x.note})[0];if(t&&o.note){t.note=o.note;touch(t);notes++}});return}
+    diffs.push({key:k,olds:olds,cur:cur});
+  });
+  loose.forEach(function(o){
+    var c=D.txns.filter(function(t){return !used[t.id]&&t.type==='exp'&&t.date===o.date&&+t.amount===+o.amount});
+    var m=c.filter(function(t){return t.text===o.text})[0]||c[0];
+    if(!m){add.push(o);return}used[m.id]=1;
+    if(o.note&&!m.note){m.note=o.note;touch(m);notes++}
+    if(o.cat&&o.cat!==m.cat)diffs.push({key:'',olds:[o],cur:[m]});
+  });
+  // 수입: 같은 달·같은 항목이면 이전 앱 금액으로 맞춤
+  nd.txns.filter(function(o){return o.type==='inc'}).forEach(function(o){
+    var ex=D.txns.filter(function(t){return t.type==='inc'&&t.cat===o.cat&&ymOf(t.date)===ymOf(o.date)});
+    if(!ex.length){add.push(o);incAdd++;return}
+    var sum=ex.reduce(function(a,t){return a+(+t.amount||0)},0);
+    if(sum!==+o.amount){ex[0].amount=+o.amount;touch(ex[0]);ex.slice(1).forEach(function(x){delTx(x.id)});incUpd++}
+  });
+  var useOld=false;
+  if(diffs.length){var ex=diffs.slice(0,6).map(function(x){var o=x.olds[0],c=x.cur[0];return '· '+o.date.slice(5)+' '+o.text+' '+won(o.amount)+'원: 이전 '+x.olds.map(function(y){return y.cat||'미분류'}).join('+')+' / 지금 '+x.cur.map(function(y){return y.cat||'미분류'}).join('+')}).join('\n');
+    useOld=!confirm('분류가 서로 다른 거래가 '+diffs.length+'건 있어요.\n'+ex+(diffs.length>6?'\n…':'')+'\n\n[확인] 지금(새 앱) 분류 그대로 두기 (추천: 오늘 Claude가 분류한 내용)\n[취소] 이전 앱에서 정한 분류로 바꾸기')}
+  var nExp=add.filter(function(o){return o.type==='exp'}).length;
+  if(useOld)diffs.forEach(function(x){x.cur.forEach(function(t){delTx(t.id)});x.olds.forEach(function(o){o.id=uid();add.push(o)})});
+  add.forEach(function(o){o.photos=o.photos||[];o.to=o.to||'';touch(o);D.txns.push(o)});
+  // 설정: 이전 앱에서 추가한 규칙·항목·이번 달 예산
+  var kws={};D.rules.forEach(function(r){kws[GB.norm(r.kw)]=1});nd.rules.forEach(function(r){if(!kws[GB.norm(r.kw)]){D.rules.push(r);kws[GB.norm(r.kw)]=1}});
+  nd.categories.forEach(function(c){if(!catByName(c.name))D.categories.push(c)});
+  nd.incomeCats.forEach(function(c){if(incNames().indexOf(c.name)<0)D.incomeCats.push(c)});
+  Object.keys(nd.overrides||{}).forEach(function(m){D.overrides[m]=Object.assign({},D.overrides[m]||{},nd.overrides[m])});
+  commit('set');
+  alert('이전 앱 데이터를 합쳤어요 ✓\n\n· 새로 추가한 지출: '+nExp+'건\n· 새로 추가한 수입: '+incAdd+'건\n· 금액을 맞춘 수입: '+incUpd+'건\n· 옮겨 온 메모: '+notes+'건\n· 분류가 달랐던 거래: '+diffs.length+'건 ('+(diffs.length?(useOld?'이전 앱 기준으로 바꿈':'새 앱 기준 유지'):'없음')+')\n\n겹치는 거래는 하나로 합쳐서 두 번 들어가지 않았어요.');
 }
 
 // ═════════ 시작 ═════════
