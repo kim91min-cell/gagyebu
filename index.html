@@ -3113,7 +3113,7 @@ var qrcode = function() {
     return qrcode;
 }));
 </script>
-<script>window.GB_CLIENT_ID=window.GB_CLIENT_ID||'';window.GB_VER='v202611130546';</script>
+<script>window.GB_CLIENT_ID=window.GB_CLIENT_ID||'';window.GB_VER='v202611130608';</script>
 <script>
 (function(){
 'use strict';
@@ -3622,7 +3622,7 @@ function editAcct(a){
 // ═════════ 더보기 ═════════
 var MORE=[['view','🔠','글씨 크기','이 기기에서 보이는 글씨 크기'],['upload','💳','카드내역 엑셀 올리기','카드사 이용내역·Claude 분류 결과 파일'],['sms','💬','문자 붙여넣기','결제 문자 여러 개를 한 번에'],['budget','🎯','예산·지출 분류','항목과 매달 예산'],['income','💼','수입 분류',''],['recurring','🔁','자동이체(매달 반복)','매달 자동으로 들어가는 고정지출'],['rules','🏷️','자동분류 규칙','가맹점 → 지출항목'],['sync','☁️','동기화 (폰·PC 같이 쓰기)','GitHub 비공개 저장소 · QR로 폰 연결'],['backup','💾','백업 · 엑셀 · 불러오기',''],['help','❓','사용법','']];
 function vMore(v){
-  if(!S.more){v.innerHTML='<div class="card menu">'+MORE.map(function(m){return '<div class="mi" data-m="'+m[0]+'"><span class="mi-e">'+m[1]+'</span><div><b>'+m[2]+'</b>'+(m[3]?'<div class="muted small">'+m[3]+'</div>':'')+'</div><span class="spacer"></span><span class="muted">›</span></div>'}).join('')+'</div><div class="muted small" style="text-align:center">우리집 가계부 · 데이터는 이 기기와 사장님 원드라이브에만 저장돼요</div>';
+  if(!S.more){v.innerHTML='<div class="card menu">'+MORE.map(function(m){return '<div class="mi" data-m="'+m[0]+'"><span class="mi-e">'+m[1]+'</span><div><b>'+m[2]+'</b>'+(m[3]?'<div class="muted small">'+m[3]+'</div>':'')+'</div><span class="spacer"></span><span class="muted">›</span></div>'}).join('')+'</div><div class="muted small" style="text-align:center">우리집 가계부 · 버전 <b>'+(window.GB_VER||'')+'</b><br>데이터는 이 기기와 사장님 저장소에만 저장돼요</div>';
     $$('.mi',v).forEach(function(el){el.onclick=function(){S.more=el.dataset.m;render()}});return}
   var title=MORE.filter(function(m){return m[0]===S.more})[0];
   var head='<div class="toolbar"><button class="btn" id="mBack">← 더보기</button><b style="font-size:16px">'+title[1]+' '+title[2]+'</b></div>';
@@ -3932,7 +3932,8 @@ window.addEventListener('hashchange',function(){if(takeCode())Sync.run()});
 window.addEventListener('online',function(){Sync.run()});
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible'&&P())Sync.run()});
 setInterval(function(){if(document.visibilityState==='visible'&&P()&&!Sync.busy)Sync.run()},90000);
-if('serviceWorker' in navigator&&location.protocol.indexOf('http')===0)navigator.serviceWorker.register('sw.js').catch(function(){});
+if('serviceWorker' in navigator&&location.protocol.indexOf('http')===0){var hadSW=!!navigator.serviceWorker.controller;navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(r){r.update()}).catch(function(){});
+  navigator.serviceWorker.addEventListener('controllerchange',function(){if(hadSW&&!window._reloaded){window._reloaded=1;location.reload()}})}
 boot();
 
 })();
